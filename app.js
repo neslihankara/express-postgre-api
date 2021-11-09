@@ -13,6 +13,15 @@ const indexRouter = require("./routes/index");
 const usersRouter = require("./routes/users");
 const authRouter = require("./routes/auth");
 
+sequelize
+  .sync()
+  .then((result) => {
+    console.log("sequelize successful");
+  })
+  .catch((err) => {
+    console.log(err);
+  });
+
 app.set("views", path.join(__dirname, "views"));
 app.set("view engine", "pug");
 

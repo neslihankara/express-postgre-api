@@ -1,7 +1,11 @@
-var express = require("express");
-var router = express.Router();
-const User = require("../models/user");
+const express = require("express");
+const router = express.Router();
+const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const pug = require("pug");
+const User = require("../models/user");
+const transporter = require("../nodemailer-config");
+const path = require("path");
 
 const signToken = (id) => {
   return jwt.sign({ id }, process.env.ACCESS_TOKEN);
@@ -35,18 +39,61 @@ function authenticateToken(req, res, next) {
   });
 }
 
-/* GET home page. */
 router.post("/register", async (req, res, next) => {
-  console.log("slm");
+  const salt = await bcrypt.genSalt(10);
   const { firstName, lastName, email, password } = req.body;
   const newUser = await User.create({
     firstName: firstName,
     lastName: lastName,
     email: email,
-    password: password,
+    password: await bcrypt.hash(req.body.password, salt),
   });
 
   createSendToken(newUser, 201, req, res);
+});
+
+router.post("/loginRequired", async (req, res, next) => {
+  const { email, password } = req.body;
+
+  const user = await User.findOne({
+    email: email,
+  });
+
+  if (!user) {
+    console.log("User couldn't found");
+    return res.sendStatus(401);
+  }
+
+  if (user) createSendToken(user, 200, req, res);
+  else res.status(401).send({ message: "Wrong credentials" });
+});
+
+router.post("/emailVerification", async (req, res, next) => {
+  if (!req.body.email) return next({ status: 400 });
+
+  const user = await User.findOne({
+    email: req.body.email,
+    isActive: false,
+  });
+
+  const mailOptions = {
+    from: "neslihan.backendchallenge@gmail.com",
+    to: user.email,
+    subject: "Your verification mail",
+    html: pug.renderFile(
+      path.join(__dirname, "../views/email-verification.pug")
+    ),
+  };
+
+  transporter.sendMail(mailOptions, (err, info) => {
+    if (err) {
+      console.log(err);
+      res.sendStatus(500);
+    } else {
+      console.log("Email sent" + info.response);
+      res.sendStatus(200);
+    }
+  });
 });
 
 module.exports = router;

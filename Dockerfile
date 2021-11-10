@@ -10,6 +10,4 @@ ENV NODE_ENV=development
 
 ADD bin ./bin
 
-# VOLUME [ "/app/src" ]
-
 CMD ["nodemon"]

@@ -9,6 +9,15 @@ require("dotenv").config();
 const sequelize = require("./database-connection");
 const app = express();
 
+sequelize
+  .sync()
+  .then((result) => {
+    console.log("sequelize successful");
+  })
+  .catch((err) => {
+    console.log(err);
+  });
+
 const indexRouter = require("./routes/index");
 const usersRouter = require("./routes/users");
 const authRouter = require("./routes/auth");

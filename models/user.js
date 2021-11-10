@@ -1,6 +1,5 @@
-const { Sequelize, DataTypes } = require("sequelize");
-
 const sequelize = require("../database-connection");
+const { DataTypes } = require("sequelize");
 
 const User = sequelize.define(
   "User",
@@ -19,6 +18,7 @@ const User = sequelize.define(
     },
     isActive: {
       type: DataTypes.BOOLEAN,
+      defaultValue: false,
     },
   },
   {
@@ -26,3 +26,5 @@ const User = sequelize.define(
     modelName: "User",
   }
 );
+
+module.exports = User;

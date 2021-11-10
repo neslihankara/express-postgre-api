@@ -4,7 +4,8 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const pug = require("pug");
 const User = require("../models/user");
-const EmailToken = require("../models/emailToken");
+const EmailVerificationToken = require("../models/emailVerificationToken");
+const EmailLoginToken = require("../models/emailLoginToken");
 const transporter = require("../nodemailer-config");
 const path = require("path");
 const dayjs = require("dayjs");
@@ -14,21 +15,17 @@ const signToken = (id) => {
   return jwt.sign({ id }, process.env.ACCESS_TOKEN);
 };
 
-const createSendToken = (user, statusCode, req, res) => {
+const createSendToken = (user) => {
   const token = signToken(user.id);
 
-  user.password = undefined;
-
-  res.status(statusCode).json({
-    status: "success",
-    token,
-    data: {
-      user,
-    },
-  });
+  return token;
 };
 
-function authenticateToken(req, res, next) {
+const isPasswordCorrect = async (candidatePassword, userPassword) => {
+  return await bcrypt.compare(candidatePassword, userPassword);
+};
+
+const authenticateToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
 
@@ -40,7 +37,7 @@ function authenticateToken(req, res, next) {
     req.user = user;
     next();
   });
-}
+};
 
 router.post("/register", async (req, res, next) => {
   const salt = await bcrypt.genSalt(10);
@@ -55,16 +52,16 @@ router.post("/register", async (req, res, next) => {
     isActive: false,
   });
 
-  const emailVerificationToken = await EmailToken.create({
-    emailToken: nanoid(),
+  const emailVerificationToken = await EmailVerificationToken.create({
+    emailVerificationToken: nanoid(),
     userId: newUser.id,
     expirationDate: dayjs().add(2, "week"),
   });
 
-  const verificationUrl = `http://localhost:8080/auth/activateAccount?emailToken=${emailVerificationToken.emailToken}`;
+  const verificationUrl = `${process.env.BASE_URL}/auth/activate-account?emailVerificationToken=${emailVerificationToken.emailVerificationToken}`;
 
   const mailOptions = {
-    from: "neslihan.backendchallenge@gmail.com",
+    from: process.env.EMAIL,
     to: newUser.email,
     subject: "Your verification mail",
     html: pug.renderFile(
@@ -88,7 +85,42 @@ router.post("/register", async (req, res, next) => {
   createSendToken(newUser, 201, req, res);
 });
 
-router.post("/loginRequired", async (req, res, next) => {
+router.post("/login-magiclink", async (req, res, next) => {
+  const { email } = req.body;
+
+  const user = await User.findOne({ where: { email } });
+
+  const emailLoginToken = await EmailLoginToken.create({
+    emailLoginToken: nanoid(),
+    userId: user.id,
+  });
+
+  const verificationUrl = `${process.env.BASE_URL}/auth/login-magiclink?emailLoginToken=${emailLoginToken.emailLoginToken}`;
+
+  const mailOptions = {
+    from: process.env.EMAIL,
+    to: user.email,
+    subject: "Login without your password",
+    html: pug.renderFile(
+      path.join(__dirname, "../views/login-without-password.pug"),
+      {
+        verificationUrl,
+      }
+    ),
+  };
+
+  transporter.sendMail(mailOptions, (err, info) => {
+    if (err) {
+      console.log(err);
+      res.sendStatus(500);
+    } else {
+      console.log("Email sent" + info.response);
+      res.sendStatus(200);
+    }
+  });
+});
+
+router.post("/login", async (req, res, next) => {
   const { email, password } = req.body;
 
   const user = await User.findOne({
@@ -96,19 +128,31 @@ router.post("/loginRequired", async (req, res, next) => {
   });
 
   if (!user) {
-    console.log("User couldn't found");
-    return res.sendStatus(401);
+    return res
+      .status(401)
+      .send({ message: "A user with the provided email couldn't be found" });
   }
 
-  if (user) createSendToken(user, 200, req, res);
-  else res.status(401).send({ message: "Wrong credentials" });
+  if (await isPasswordCorrect(password, user.password)) {
+    const token = createSendToken(user);
+
+    return res.send({
+      status: "success",
+      token,
+      data: {
+        user,
+      },
+    });
+  }
+
+  res.status(401).send({ message: "Wrong password!" });
 });
 
-router.get("/activateAccount", async (req, res, next) => {
-  if (!req.query.emailToken) return next({ status: 400 });
+router.get("/activate-account", async (req, res, next) => {
+  if (!req.query.emailVerificationToken) return next({ status: 400 });
 
-  const tokenItem = await EmailToken.findOne({
-    where: { emailToken: req.query.emailToken },
+  const tokenItem = await EmailVerificationToken.findOne({
+    where: { emailVerificationToken: req.query.emailVerificationToken },
   });
 
   try {
@@ -123,7 +167,43 @@ router.get("/activateAccount", async (req, res, next) => {
     console.log("User is activated");
     res.sendStatus(200);
   } catch (err) {
-    res.status(401).status({ message: err.message });
+    res.status(401).send({ message: err.message });
+  }
+});
+
+router.get("/login-magiclink", async (req, res, next) => {
+  try {
+    const emailLoginToken = await EmailLoginToken.findOne({
+      where: { emailLoginToken: req.query.emailLoginToken },
+    });
+
+    const user = await User.findOne({ where: { id: emailLoginToken.userId } });
+
+    const token = createSendToken(user);
+
+    return res.send({
+      status: "success",
+      token,
+      data: {
+        user,
+      },
+    });
+  } catch (err) {
+    res.status(404).send({ message: err.message });
+  }
+});
+
+router.get("/me", authenticateToken, async (req, res, next) => {
+  try {
+    const user = await User.findOne({
+      where: {
+        id: req.user.id,
+      },
+    });
+
+    res.status(200).send(user);
+  } catch (e) {
+    res.send({ message: e.message });
   }
 });
 

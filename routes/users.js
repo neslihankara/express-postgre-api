@@ -1,9 +1,11 @@
-var express = require("express");
-var router = express.Router();
+const express = require("express");
+const User = require("../models/user");
+const router = express.Router();
 
-/* GET users listing. */
-router.get("/", function (req, res, next) {
-  res.send("");
+router.get("/", async (req, res, next) => {
+  const users = await User.findAll({});
+
+  res.status(200).send(users);
 });
 
 module.exports = router;

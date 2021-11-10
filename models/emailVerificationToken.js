@@ -1,10 +1,10 @@
 const sequelize = require("../database-connection");
 const { DataTypes } = require("sequelize");
 
-const EmailToken = sequelize.define(
-  "EmailToken",
+const EmailVerificationToken = sequelize.define(
+  "EmailVerificationToken",
   {
-    emailToken: {
+    emailVerificationToken: {
       type: DataTypes.STRING,
     },
     userId: {
@@ -16,8 +16,8 @@ const EmailToken = sequelize.define(
   },
   {
     sequelize,
-    modelName: "EmailToken",
+    modelName: "EmailVerificationToken",
   }
 );
 
-module.exports = EmailToken;
+module.exports = EmailVerificationToken;

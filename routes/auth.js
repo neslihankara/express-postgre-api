@@ -12,7 +12,7 @@ const dayjs = require("dayjs");
 const { nanoid } = require("nanoid");
 
 const signToken = (id) => {
-  return jwt.sign({ id }, process.env.ACCESS_TOKEN);
+  return jwt.sign({ id }, process.env.JWT_SECRET);
 };
 
 const createSendToken = (user) => {
@@ -31,7 +31,7 @@ const authenticateToken = (req, res, next) => {
 
   if (token == null) return res.sendStatus(401);
 
-  jwt.verify(token, process.env.ACCESS_TOKEN, (err, user) => {
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
     if (err) return res.sendStatus(403);
 
     req.user = user;
@@ -61,7 +61,7 @@ router.post("/register", async (req, res, next) => {
   const verificationUrl = `${process.env.BASE_URL}/auth/activate-account?emailVerificationToken=${emailVerificationToken.emailVerificationToken}`;
 
   const mailOptions = {
-    from: process.env.EMAIL,
+    from: process.env.SENDER_EMAIL,
     to: newUser.email,
     subject: "Your verification mail",
     html: pug.renderFile(
@@ -98,7 +98,7 @@ router.post("/login-magiclink", async (req, res, next) => {
   const verificationUrl = `${process.env.BASE_URL}/auth/login-magiclink?emailLoginToken=${emailLoginToken.emailLoginToken}`;
 
   const mailOptions = {
-    from: process.env.EMAIL,
+    from: process.env.SENDER_EMAIL,
     to: user.email,
     subject: "Login without your password",
     html: pug.renderFile(

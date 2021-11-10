@@ -90,6 +90,8 @@ router.post("/login-magiclink", async (req, res, next) => {
 
   const user = await User.findOne({ where: { email } });
 
+  if (!user) return res.status(401).send({ message: "User not found!" });
+
   const emailLoginToken = await EmailLoginToken.create({
     emailLoginToken: nanoid(),
     userId: user.id,

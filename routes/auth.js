@@ -4,15 +4,18 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const pug = require("pug");
 const User = require("../models/user");
+const EmailToken = require("../models/emailToken");
 const transporter = require("../nodemailer-config");
 const path = require("path");
+const dayjs = require("dayjs");
+const { nanoid } = require("nanoid");
 
 const signToken = (id) => {
   return jwt.sign({ id }, process.env.ACCESS_TOKEN);
 };
 
 const createSendToken = (user, statusCode, req, res) => {
-  const token = signToken(user._id);
+  const token = signToken(user.id);
 
   user.password = undefined;
 
@@ -41,47 +44,34 @@ function authenticateToken(req, res, next) {
 
 router.post("/register", async (req, res, next) => {
   const salt = await bcrypt.genSalt(10);
+
   const { firstName, lastName, email, password } = req.body;
+
   const newUser = await User.create({
     firstName: firstName,
     lastName: lastName,
     email: email,
     password: await bcrypt.hash(req.body.password, salt),
-  });
-
-  createSendToken(newUser, 201, req, res);
-});
-
-router.post("/loginRequired", async (req, res, next) => {
-  const { email, password } = req.body;
-
-  const user = await User.findOne({
-    email: email,
-  });
-
-  if (!user) {
-    console.log("User couldn't found");
-    return res.sendStatus(401);
-  }
-
-  if (user) createSendToken(user, 200, req, res);
-  else res.status(401).send({ message: "Wrong credentials" });
-});
-
-router.post("/emailVerification", async (req, res, next) => {
-  if (!req.body.email) return next({ status: 400 });
-
-  const user = await User.findOne({
-    email: req.body.email,
     isActive: false,
   });
 
+  const emailVerificationToken = await EmailToken.create({
+    emailToken: nanoid(),
+    userId: newUser.id,
+    expirationDate: dayjs().add(2, "week"),
+  });
+
+  const verificationUrl = `http://localhost:8080/auth/activateAccount?emailToken=${emailVerificationToken.emailToken}`;
+
   const mailOptions = {
     from: "neslihan.backendchallenge@gmail.com",
-    to: user.email,
+    to: newUser.email,
     subject: "Your verification mail",
     html: pug.renderFile(
-      path.join(__dirname, "../views/email-verification.pug")
+      path.join(__dirname, "../views/email-verification.pug"),
+      {
+        verificationUrl,
+      }
     ),
   };
 
@@ -94,6 +84,47 @@ router.post("/emailVerification", async (req, res, next) => {
       res.sendStatus(200);
     }
   });
+
+  createSendToken(newUser, 201, req, res);
+});
+
+router.post("/loginRequired", async (req, res, next) => {
+  const { email, password } = req.body;
+
+  const user = await User.findOne({
+    where: { email: email },
+  });
+
+  if (!user) {
+    console.log("User couldn't found");
+    return res.sendStatus(401);
+  }
+
+  if (user) createSendToken(user, 200, req, res);
+  else res.status(401).send({ message: "Wrong credentials" });
+});
+
+router.get("/activateAccount", async (req, res, next) => {
+  if (!req.query.emailToken) return next({ status: 400 });
+
+  const tokenItem = await EmailToken.findOne({
+    where: { emailToken: req.query.emailToken },
+  });
+
+  try {
+    const user = await User.findOne({
+      where: { id: tokenItem.userId },
+    });
+
+    user.isActive = true;
+
+    user.save();
+
+    console.log("User is activated");
+    res.sendStatus(200);
+  } catch (err) {
+    res.status(401).status({ message: err.message });
+  }
 });
 
 module.exports = router;

@@ -9,10 +9,6 @@ require("dotenv").config();
 const sequelize = require("./database-connection");
 const app = express();
 
-const indexRouter = require("./routes/index");
-const usersRouter = require("./routes/users");
-const authRouter = require("./routes/auth");
-
 sequelize
   .sync()
   .then((result) => {
@@ -21,6 +17,10 @@ sequelize
   .catch((err) => {
     console.log(err);
   });
+
+const indexRouter = require("./routes/index");
+const usersRouter = require("./routes/users");
+const authRouter = require("./routes/auth");
 
 app.set("views", path.join(__dirname, "views"));
 app.set("view engine", "pug");
